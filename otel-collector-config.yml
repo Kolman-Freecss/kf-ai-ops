@@ -1,0 +1,114 @@
+# OpenTelemetry Collector Configuration
+# Recibe telemetría de aplicaciones y la envía a backends
+
+receivers:
+  # Receptor OTLP (protocolo nativo de OpenTelemetry)
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Receptor de métricas del propio collector
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['localhost:8888']
+
+processors:
+  # Procesamiento en batch para mejor rendimiento
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+  # Añadir atributos de recurso
+  resource:
+    attributes:
+      - key: environment
+        value: development
+        action: upsert
+      - key: service.namespace
+        value: ai-ops
+        action: upsert
+
+  # Filtrar spans de health checks
+  filter:
+    spans:
+      exclude:
+        match_type: strict
+        attributes:
+          - key: http.target
+            value: /health
+
+  # Sampling inteligente
+  probabilistic_sampler:
+    sampling_percentage: 100  # 100% en desarrollo
+
+exporters:
+  # Exportar a Jaeger
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+  # Exportar métricas a Prometheus
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: ai_ops
+
+  # Logging para debug
+  logging:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # OTLP para backends compatibles (Tempo, etc.)
+  otlp:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+extensions:
+  # Health check del collector
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # Métricas del collector
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+  
+  pipelines:
+    # Pipeline de traces
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource, filter]
+      exporters: [jaeger, logging]
+
+    # Pipeline de métricas
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [batch, resource]
+      exporters: [prometheus, logging]
+
+    # Pipeline de logs
+    logs:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [logging]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888
+

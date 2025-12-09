@@ -1,0 +1,100 @@
+# AI Analyzer - Composite Action for pipeline analysis
+name: "AI Pipeline Analyzer"
+description: "Analyzes CI/CD pipelines and generates optimization suggestions using AI"
+
+inputs:
+  github_token:
+    description: "GitHub token for API access"
+    required: true
+  analyze_history:
+    description: "Analyze run history"
+    default: "true"
+  lookback_days:
+    description: "Days to look back for analysis"
+    default: "7"
+
+outputs:
+  suggestions:
+    description: "Optimization suggestions in JSON"
+    value: ${{ steps.analyze.outputs.suggestions }}
+  should_cache:
+    description: "Whether caching is recommended"
+    value: ${{ steps.analyze.outputs.should_cache }}
+  parallel_tests:
+    description: "Whether parallel tests are recommended"
+    value: ${{ steps.analyze.outputs.parallel_tests }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Analyze Pipeline
+      id: analyze
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        LOOKBACK_DAYS: ${{ inputs.lookback_days }}
+      run: |
+        python << 'EOF'
+        import json
+        import os
+        import glob
+
+        suggestions = []
+        should_cache = "true"
+        parallel_tests = "true"
+
+        # Analyze project structure
+        has_requirements = os.path.exists("app/requirements.txt") or os.path.exists("requirements.txt")
+        has_package_json = os.path.exists("package.json")
+        has_tests = len(glob.glob("**/test*.py", recursive=True)) > 0
+
+        # Generate suggestions based on analysis
+        if has_requirements or has_package_json:
+            suggestions.append({
+                "type": "cache",
+                "message": "Dependencies detected - caching recommended",
+                "impact": "high"
+            })
+
+        if has_tests:
+            test_files = glob.glob("**/test*.py", recursive=True)
+            if len(test_files) > 3:
+                suggestions.append({
+                    "type": "parallel",
+                    "message": f"Detected {len(test_files)} test files - consider matrix strategy",
+                    "impact": "high"
+                })
+
+        # Analyze existing workflows
+        workflow_files = glob.glob(".github/workflows/*.yml") + glob.glob(".github/workflows/*.yaml")
+        for wf in workflow_files:
+            with open(wf) as f:
+                content = f.read().lower()
+                if "cache" not in content:
+                    suggestions.append({
+                        "type": "missing_cache",
+                        "message": f"Workflow {wf} doesn't use cache",
+                        "impact": "medium"
+                    })
+
+        # Output for GitHub Actions
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"suggestions={json.dumps(suggestions)}\n")
+            f.write(f"should_cache={should_cache}\n")
+            f.write(f"parallel_tests={parallel_tests}\n")
+
+        print(f"Analysis complete: {len(suggestions)} suggestions generated")
+        EOF
+
+    - name: Report Analysis
+      shell: bash
+      run: |
+        echo "### 🔍 Pipeline Analysis Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- Should use cache: ${{ steps.analyze.outputs.should_cache }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Parallel tests recommended: ${{ steps.analyze.outputs.parallel_tests }}" >> $GITHUB_STEP_SUMMARY

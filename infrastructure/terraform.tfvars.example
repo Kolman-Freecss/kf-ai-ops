@@ -1,0 +1,25 @@
+# Example variables for AI-Ops Infrastructure
+# Copy to terraform.tfvars and adjust values
+
+environment = "development"
+region      = "us-east-1"
+
+vpc_cidr = "10.0.0.0/16"
+
+availability_zones = [
+  "us-east-1a",
+  "us-east-1b"
+]
+
+container_image = "ai-ops-api:latest"
+container_port  = 8000
+
+log_retention_days = 30
+
+enable_monitoring = true
+
+ai_optimizer_config = {
+  enabled              = true
+  auto_apply           = false
+  confidence_threshold = 0.8
+}

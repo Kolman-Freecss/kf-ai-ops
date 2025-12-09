@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Ops Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a2234;
+            --bg-card-hover: #222d42;
+            --accent-cyan: #22d3ee;
+            --accent-purple: #a855f7;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #2d3a50;
+            --glow-cyan: 0 0 20px rgba(34, 211, 238, 0.3);
+            --glow-purple: 0 0 20px rgba(168, 85, 247, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(34, 211, 238, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(34, 211, 238, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-gradient {
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 20%, rgba(168, 85, 247, 0.08) 0%, transparent 40%),
+                        radial-gradient(circle at 70% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 40%);
+            animation: gradientMove 20s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        @keyframes gradientMove {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(-5%, -5%); }
+        }
+
+        /* Layout */
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            box-shadow: var(--glow-cyan);
+        }
+
+        .logo h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-emerald);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Grid layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-cyan);
+            box-shadow: var(--glow-cyan);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .card-icon {
+            font-size: 1.25rem;
+        }
+
+        .card-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-value.cyan { color: var(--accent-cyan); }
+        .card-value.purple { color: var(--accent-purple); }
+        .card-value.emerald { color: var(--accent-emerald); }
+        .card-value.amber { color: var(--accent-amber); }
+
+        .card-trend {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .trend-up { color: var(--accent-emerald); }
+        .trend-down { color: var(--accent-rose); }
+
+        /* Wide cards */
+        .card-wide {
+            grid-column: span 2;
+        }
+
+        .card-full {
+            grid-column: span 4;
+        }
+
+        /* Chart placeholder */
+        .chart-container {
+            height: 200px;
+            background: linear-gradient(180deg, transparent, rgba(34, 211, 238, 0.05));
+            border-radius: 8px;
+            display: flex;
+            align-items: flex-end;
+            padding: 1rem;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .chart-bar {
+            flex: 1;
+            background: linear-gradient(180deg, var(--accent-cyan), rgba(34, 211, 238, 0.3));
+            border-radius: 4px 4px 0 0;
+            transition: all 0.3s ease;
+            min-height: 20px;
+        }
+
+        .chart-bar:hover {
+            background: linear-gradient(180deg, var(--accent-purple), rgba(168, 85, 247, 0.3));
+            transform: scaleY(1.05);
+        }
+
+        /* Pipeline list */
+        .pipeline-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .pipeline-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .pipeline-item:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .pipeline-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .pipeline-status.success { background: var(--accent-emerald); }
+        .pipeline-status.running { 
+            background: var(--accent-amber);
+            animation: pulse 1s ease-in-out infinite;
+        }
+        .pipeline-status.failed { background: var(--accent-rose); }
+
+        .pipeline-info {
+            flex: 1;
+        }
+
+        .pipeline-name {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .pipeline-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .pipeline-duration {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* Optimization suggestions */
+        .suggestion-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .suggestion-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-purple);
+        }
+
+        .suggestion-icon {
+            font-size: 1.5rem;
+        }
+
+        .suggestion-content h4 {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .suggestion-content p {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .suggestion-badge {
+            font-size: 0.625rem;
+            padding: 0.25rem 0.5rem;
+            background: rgba(168, 85, 247, 0.2);
+            color: var(--accent-purple);
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        /* Metrics grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .metric-item {
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+        }
+
+        .metric-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent-cyan);
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .footer-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent-cyan);
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .card-wide, .card-full {
+                grid-column: span 2;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            .card-wide, .card-full {
+                grid-column: span 1;
+            }
+            header {
+                flex-direction: column;
+                gap: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-gradient"></div>
+    
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">🔮</div>
+                <h1>AI-Ops Platform</h1>
+            </div>
+            <div class="header-status">
+                <span class="status-dot"></span>
+                <span>All systems operational</span>
+            </div>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Metric Cards -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Active Pipelines</span>
+                    <span class="card-icon">⚡</span>
+                </div>
+                <div class="card-value cyan" id="active-pipelines">12</div>
+                <div class="card-trend trend-up">
+                    <span>↑ 8%</span>
+                    <span style="color: var(--text-muted)">vs yesterday</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Success Rate</span>
+                    <span class="card-icon">✅</span>
+                </div>
+                <div class="card-value emerald" id="success-rate">94.2%</div>
+                <div class="card-trend trend-up">
+                    <span>↑ 2.3%</span>
+                    <span style="color: var(--text-muted)">this week</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Average Time</span>
+                    <span class="card-icon">⏱️</span>
+                </div>
+                <div class="card-value amber" id="avg-time">4:32</div>
+                <div class="card-trend trend-down">
+                    <span>↓ 18%</span>
+                    <span style="color: var(--text-muted)">optimized</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">AI Optimizations</span>
+                    <span class="card-icon">🤖</span>
+                </div>
+                <div class="card-value purple" id="ai-optimizations">23</div>
+                <div class="card-trend">
+                    <span style="color: var(--accent-purple)">+5 today</span>
+                </div>
+            </div>
+
+            <!-- Pipeline Duration Chart -->
+            <div class="card card-wide">
+                <div class="card-header">
+                    <span class="card-title">Pipeline Duration (last 7 days)</span>
+                    <span class="card-icon">📊</span>
+                </div>
+                <div class="chart-container" id="duration-chart">
+                    <div class="chart-bar" style="height: 45%"></div>
+                    <div class="chart-bar" style="height: 60%"></div>
+                    <div class="chart-bar" style="height: 55%"></div>
+                    <div class="chart-bar" style="height: 80%"></div>
+                    <div class="chart-bar" style="height: 40%"></div>
+                    <div class="chart-bar" style="height: 35%"></div>
+                    <div class="chart-bar" style="height: 30%"></div>
+                </div>
+            </div>
+
+            <!-- Recent Pipelines -->
+            <div class="card card-wide">
+                <div class="card-header">
+                    <span class="card-title">Recent Pipelines</span>
+                    <span class="card-icon">📋</span>
+                </div>
+                <div class="pipeline-list">
+                    <div class="pipeline-item">
+                        <div class="pipeline-status success"></div>
+                        <div class="pipeline-info">
+                            <div class="pipeline-name">CI/CD Pipeline</div>
+                            <div class="pipeline-meta">main • #1247 • 2 min ago</div>
+                        </div>
+                        <div class="pipeline-duration">3:42</div>
+                    </div>
+                    <div class="pipeline-item">
+                        <div class="pipeline-status running"></div>
+                        <div class="pipeline-info">
+                            <div class="pipeline-name">Deploy Production</div>
+                            <div class="pipeline-meta">release/v2.1 • #892 • in progress</div>
+                        </div>
+                        <div class="pipeline-duration">2:15...</div>
+                    </div>
+                    <div class="pipeline-item">
+                        <div class="pipeline-status success"></div>
+                        <div class="pipeline-info">
+                            <div class="pipeline-name">AI Optimizer</div>
+                            <div class="pipeline-meta">main • #445 • 15 min ago</div>
+                        </div>
+                        <div class="pipeline-duration">1:28</div>
+                    </div>
+                    <div class="pipeline-item">
+                        <div class="pipeline-status failed"></div>
+                        <div class="pipeline-info">
+                            <div class="pipeline-name">Integration Tests</div>
+                            <div class="pipeline-meta">feature/auth • #203 • 1h ago</div>
+                        </div>
+                        <div class="pipeline-duration">5:12</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Suggestions -->
+            <div class="card card-wide">
+                <div class="card-header">
+                    <span class="card-title">AI Suggestions</span>
+                    <span class="card-icon">💡</span>
+                </div>
+                <div class="suggestion-list">
+                    <div class="suggestion-item">
+                        <span class="suggestion-icon">⚡</span>
+                        <div class="suggestion-content">
+                            <h4>Parallelize test jobs <span class="suggestion-badge">High Impact</span></h4>
+                            <p>Unit and integration tests can run in parallel, saving ~3 minutes.</p>
+                        </div>
+                    </div>
+                    <div class="suggestion-item">
+                        <span class="suggestion-icon">💾</span>
+                        <div class="suggestion-content">
+                            <h4>Optimize dependency caching</h4>
+                            <p>The "build" job reinstalls dependencies on each run. Using cache@v4 would save ~2 minutes.</p>
+                        </div>
+                    </div>
+                    <div class="suggestion-item">
+                        <span class="suggestion-icon">🔄</span>
+                        <div class="suggestion-content">
+                            <h4>Add concurrency control</h4>
+                            <p>Canceling previous pipelines on the same PR would prevent redundant executions.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Infrastructure Status -->
+            <div class="card card-wide">
+                <div class="card-header">
+                    <span class="card-title">Infrastructure Status (OpenTofu)</span>
+                    <span class="card-icon">🏗️</span>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-item">
+                        <div class="metric-value">32</div>
+                        <div class="metric-label">Managed Resources</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" style="color: var(--accent-emerald)">0</div>
+                        <div class="metric-label">Drift Detected</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value">3</div>
+                        <div class="metric-label">Active Modules</div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span style="color: var(--text-secondary);">Last apply:</span>
+                        <span style="font-family: 'JetBrains Mono', monospace; color: var(--accent-emerald);">2h ago • success</span>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <span style="padding: 0.25rem 0.5rem; background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); border-radius: 4px; font-size: 0.75rem;">networking ✓</span>
+                        <span style="padding: 0.25rem 0.5rem; background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); border-radius: 4px; font-size: 0.75rem;">compute ✓</span>
+                        <span style="padding: 0.25rem 0.5rem; background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); border-radius: 4px; font-size: 0.75rem;">observability ✓</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OpenTelemetry Traces -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">OpenTelemetry - Recent Traces</span>
+                    <span class="card-icon">🔍</span>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <th style="text-align: left; padding: 0.75rem; color: var(--text-secondary); font-weight: 500;">Trace ID</th>
+                                <th style="text-align: left; padding: 0.75rem; color: var(--text-secondary); font-weight: 500;">Operation</th>
+                                <th style="text-align: left; padding: 0.75rem; color: var(--text-secondary); font-weight: 500;">Service</th>
+                                <th style="text-align: right; padding: 0.75rem; color: var(--text-secondary); font-weight: 500;">Duration</th>
+                                <th style="text-align: right; padding: 0.75rem; color: var(--text-secondary); font-weight: 500;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-family: 'JetBrains Mono', monospace; font-size: 0.875rem;">
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 0.75rem; color: var(--accent-cyan);">a1b2c3d4e5f6</td>
+                                <td style="padding: 0.75rem;">POST /optimize</td>
+                                <td style="padding: 0.75rem; color: var(--text-secondary);">ai-ops-api</td>
+                                <td style="padding: 0.75rem; text-align: right;">245ms</td>
+                                <td style="padding: 0.75rem; text-align: right;"><span style="color: var(--accent-emerald);">●</span> OK</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 0.75rem; color: var(--accent-cyan);">f6e5d4c3b2a1</td>
+                                <td style="padding: 0.75rem;">GET /metrics/pipeline</td>
+                                <td style="padding: 0.75rem; color: var(--text-secondary);">ai-ops-api</td>
+                                <td style="padding: 0.75rem; text-align: right;">82ms</td>
+                                <td style="padding: 0.75rem; text-align: right;"><span style="color: var(--accent-emerald);">●</span> OK</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 0.75rem; color: var(--accent-cyan);">9a8b7c6d5e4f</td>
+                                <td style="padding: 0.75rem;">ai_optimization</td>
+                                <td style="padding: 0.75rem; color: var(--text-secondary);">ai-optimizer</td>
+                                <td style="padding: 0.75rem; text-align: right;">1.2s</td>
+                                <td style="padding: 0.75rem; text-align: right;"><span style="color: var(--accent-emerald);">●</span> OK</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.75rem; color: var(--accent-cyan);">3f2e1d0c9b8a</td>
+                                <td style="padding: 0.75rem;">database_query</td>
+                                <td style="padding: 0.75rem; color: var(--text-secondary);">ai-ops-api</td>
+                                <td style="padding: 0.75rem; text-align: right; color: var(--accent-amber);">523ms</td>
+                                <td style="padding: 0.75rem; text-align: right;"><span style="color: var(--accent-amber);">●</span> SLOW</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div>AI-Ops Platform v1.0.0 • OpenTelemetry • OpenTofu</div>
+            <div class="footer-links">
+                <a href="#">Documentation</a>
+                <a href="#">API</a>
+                <a href="#">GitHub</a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Real-time update simulation
+        const API_BASE = 'http://localhost:8000';
+
+        async function updateMetrics() {
+            try {
+                // Simulate data fetching (in production, this would call the real API)
+                const mockData = {
+                    activePipelines: Math.floor(Math.random() * 5) + 10,
+                    successRate: (90 + Math.random() * 8).toFixed(1),
+                    avgTime: `${Math.floor(Math.random() * 2) + 3}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
+                    aiOptimizations: Math.floor(Math.random() * 10) + 20
+                };
+
+                document.getElementById('active-pipelines').textContent = mockData.activePipelines;
+                document.getElementById('success-rate').textContent = `${mockData.successRate}%`;
+                document.getElementById('avg-time').textContent = mockData.avgTime;
+                document.getElementById('ai-optimizations').textContent = mockData.aiOptimizations;
+            } catch (error) {
+                console.log('Using mock data - API not available');
+            }
+        }
+
+        // Update every 30 seconds
+        setInterval(updateMetrics, 30000);
+
+        // Animate chart bars
+        function animateChart() {
+            const bars = document.querySelectorAll('.chart-bar');
+            bars.forEach(bar => {
+                const height = 20 + Math.random() * 70;
+                bar.style.height = `${height}%`;
+            });
+        }
+
+        // Animate chart every 5 seconds
+        setInterval(animateChart, 5000);
+
+        console.log('🔮 AI-Ops Dashboard initialized');
+        console.log('📊 OpenTelemetry traces available at /traces/summary');
+        console.log('🤖 AI Optimizer suggestions available at /optimize');
+    </script>
+</body>
+</html>

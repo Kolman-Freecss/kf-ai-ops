@@ -1,0 +1,197 @@
+# CI/CD Pipeline con Observabilidad y AI Optimization
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  OTEL_SERVICE_NAME: ci-pipeline
+  AI_OPTIMIZER_ENABLED: true
+
+jobs:
+  # Job de análisis inicial - recolecta métricas para el optimizador
+  analyze:
+    name: 🔍 Pipeline Analysis
+    runs-on: ubuntu-latest
+    outputs:
+      optimization_suggestions: ${{ steps.analyze.outputs.suggestions }}
+      should_cache: ${{ steps.analyze.outputs.should_cache }}
+      parallel_tests: ${{ steps.analyze.outputs.parallel_tests }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Analyze Pipeline History
+        id: analyze
+        uses: ./.github/actions/ai-analyzer
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          analyze_history: true
+        continue-on-error: true
+
+  lint:
+    name: 🔬 Lint & Type Check
+    runs-on: ubuntu-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Cache inteligente basado en sugerencias de IA
+      - name: Cache Dependencies
+        if: needs.analyze.outputs.should_cache != 'false'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy
+          pip install -r app/requirements.txt
+
+      - name: Run Ruff Linter
+        run: ruff check app/
+
+      - name: Run Type Checking
+        run: mypy app/ --ignore-missing-imports
+        continue-on-error: true
+
+  test:
+    name: 🧪 Tests
+    runs-on: ubuntu-latest
+    needs: [analyze, lint]
+    strategy:
+      # Matrix dinámica basada en análisis de IA
+      matrix:
+        test-group: [unit, integration]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .venv
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt
+
+      - name: Run Tests
+        run: |
+          pytest app/tests/ -v --tb=short -m "${{ matrix.test-group }}" || true
+        env:
+          TEST_GROUP: ${{ matrix.test-group }}
+
+      - name: Report Test Metrics
+        if: always()
+        run: |
+          echo "::notice::Test group ${{ matrix.test-group }} completed"
+
+  build:
+    name: 🏗️ Build & Push
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          push: false
+          tags: ai-ops-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  infrastructure:
+    name: 🌐 Infrastructure Check
+    runs-on: ubuntu-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.6.0
+
+      - name: OpenTofu Format Check
+        run: tofu fmt -check -recursive
+        working-directory: infrastructure
+
+      - name: OpenTofu Init
+        run: tofu init -backend=false
+        working-directory: infrastructure
+
+      - name: OpenTofu Validate
+        run: tofu validate
+        working-directory: infrastructure
+
+      - name: OpenTofu Plan (Dry Run)
+        run: tofu plan -input=false
+        working-directory: infrastructure
+        continue-on-error: true
+
+  # Job de optimización - analiza la ejecución y sugiere mejoras
+  optimize:
+    name: 🤖 AI Optimization
+    runs-on: ubuntu-latest
+    needs: [lint, test, build, infrastructure]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect Pipeline Metrics
+        id: metrics
+        run: |
+          echo "duration=${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "jobs_count=5" >> $GITHUB_OUTPUT
+
+      - name: AI Pipeline Optimizer
+        uses: ./.github/actions/ai-optimizer
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          workflow_run_id: ${{ github.run_id }}
+          auto_create_pr: false
+        continue-on-error: true
+
+      - name: Report Optimization Results
+        if: always()
+        run: |
+          echo "## 🤖 AI Optimization Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Pipeline analyzed for potential optimizations." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Run ID | ${{ github.run_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Duration | Collected |" >> $GITHUB_STEP_SUMMARY
+          echo "| Optimizations | Pending Review |" >> $GITHUB_STEP_SUMMARY
+

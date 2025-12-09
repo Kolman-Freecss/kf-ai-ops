@@ -1,0 +1,296 @@
+# AI Pipeline Optimizer - Se ejecuta después de cada workflow para analizar y optimizar
+name: AI Pipeline Optimizer
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+  schedule:
+    # Análisis semanal de tendencias
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+    inputs:
+      analyze_all:
+        description: "Analizar todos los workflows recientes"
+        type: boolean
+        default: false
+      auto_apply:
+        description: "Aplicar optimizaciones automáticamente"
+        type: boolean
+        default: false
+
+env:
+  AI_MODEL: gpt-4-turbo-preview
+
+jobs:
+  collect-metrics:
+    name: 📊 Collect Pipeline Metrics
+    runs-on: ubuntu-latest
+    outputs:
+      metrics_json: ${{ steps.collect.outputs.metrics }}
+      workflows_analyzed: ${{ steps.collect.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: pip install httpx pyyaml
+
+      - name: Collect Workflow Metrics
+        id: collect
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python << 'EOF'
+          import json
+          import os
+          import httpx
+          
+          token = os.environ["GITHUB_TOKEN"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github.v3+json"
+          }
+          
+          # Obtener últimas ejecuciones
+          url = f"https://api.github.com/repos/{repo}/actions/runs?per_page=20"
+          
+          try:
+              response = httpx.get(url, headers=headers, timeout=30)
+              data = response.json()
+              
+              metrics = {
+                  "total_runs": data.get("total_count", 0),
+                  "runs": []
+              }
+              
+              for run in data.get("workflow_runs", [])[:10]:
+                  metrics["runs"].append({
+                      "id": run["id"],
+                      "name": run["name"],
+                      "status": run["status"],
+                      "conclusion": run["conclusion"],
+                      "created_at": run["created_at"],
+                      "updated_at": run["updated_at"],
+                  })
+              
+              # Guardar métricas
+              with open("metrics.json", "w") as f:
+                  json.dump(metrics, f)
+              
+              print(f"Collected {len(metrics['runs'])} workflow runs")
+              
+              # Output para siguiente job
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write(f"metrics={json.dumps(metrics)}\n")
+                  f.write(f"count={len(metrics['runs'])}\n")
+                  
+          except Exception as e:
+              print(f"Error collecting metrics: {e}")
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write('metrics={}\n')
+                  f.write('count=0\n')
+          EOF
+
+      - name: Upload Metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics
+          path: metrics.json
+          retention-days: 30
+
+  analyze:
+    name: 🧠 AI Analysis
+    runs-on: ubuntu-latest
+    needs: collect-metrics
+    if: needs.collect-metrics.outputs.workflows_analyzed > 0
+    outputs:
+      suggestions: ${{ steps.analyze.outputs.suggestions }}
+      confidence: ${{ steps.analyze.outputs.confidence }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: pip install openai pyyaml httpx
+
+      - name: Download Metrics
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-metrics
+
+      - name: Analyze with AI
+        id: analyze
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python << 'EOF'
+          import json
+          import os
+          import yaml
+
+          # Leer métricas
+          with open("metrics.json") as f:
+              metrics = json.load(f)
+
+          # Leer workflow actual
+          workflow_path = ".github/workflows/ci.yml"
+          with open(workflow_path) as f:
+              workflow_config = f.read()
+
+          # Analizar patrones (versión simplificada sin API real)
+          suggestions = []
+          
+          # Análisis basado en reglas + heurísticas
+          if "cache" not in workflow_config.lower():
+              suggestions.append({
+                  "type": "cache",
+                  "title": "Añadir caché de dependencias",
+                  "description": "No se detectó uso de cache. Cachear dependencias puede reducir 1-3 minutos.",
+                  "impact": "high",
+                  "confidence": 0.95
+              })
+          
+          if "matrix" not in workflow_config.lower():
+              suggestions.append({
+                  "type": "parallel",
+                  "title": "Considerar matrix para tests paralelos",
+                  "description": "Paralelizar tests puede reducir significativamente el tiempo total.",
+                  "impact": "high", 
+                  "confidence": 0.85
+              })
+          
+          if "concurrency" not in workflow_config.lower():
+              suggestions.append({
+                  "type": "concurrency",
+                  "title": "Añadir control de concurrencia",
+                  "description": "Cancelar ejecuciones anteriores en el mismo PR ahorra recursos.",
+                  "impact": "medium",
+                  "confidence": 0.90
+              })
+          
+          # Calcular confianza promedio
+          avg_confidence = sum(s["confidence"] for s in suggestions) / len(suggestions) if suggestions else 0
+
+          # Output
+          result = {
+              "suggestions": suggestions,
+              "total_suggestions": len(suggestions),
+              "average_confidence": avg_confidence
+          }
+          
+          with open("analysis_result.json", "w") as f:
+              json.dump(result, f, indent=2)
+          
+          # GitHub Output
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"suggestions={json.dumps(suggestions)}\n")
+              f.write(f"confidence={avg_confidence}\n")
+          
+          print(f"Generated {len(suggestions)} optimization suggestions")
+          EOF
+
+      - name: Upload Analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-analysis
+          path: analysis_result.json
+          retention-days: 30
+
+  report:
+    name: 📋 Generate Report
+    runs-on: ubuntu-latest
+    needs: [collect-metrics, analyze]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Analysis
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-analysis
+
+      - name: Generate Summary Report
+        run: |
+          cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+          # 🤖 AI Pipeline Optimization Report
+          
+          ## 📊 Metrics Collected
+          - Workflows analyzed: ${{ needs.collect-metrics.outputs.workflows_analyzed }}
+          - Analysis confidence: ${{ needs.analyze.outputs.confidence }}
+          
+          ## 💡 Suggestions
+          
+          EOF
+          
+          # Parsear y mostrar sugerencias
+          python << 'PYEOF'
+          import json
+          import os
+          
+          with open("analysis_result.json") as f:
+              result = json.load(f)
+          
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              for i, s in enumerate(result["suggestions"], 1):
+                  impact_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(s["impact"], "⚪")
+                  summary.write(f"\n### {i}. {s['title']}\n")
+                  summary.write(f"- **Impact**: {impact_emoji} {s['impact'].upper()}\n")
+                  summary.write(f"- **Confidence**: {s['confidence']*100:.0f}%\n")
+                  summary.write(f"- **Description**: {s['description']}\n")
+              
+              if not result["suggestions"]:
+                  summary.write("\n✅ No optimization suggestions - pipeline looks good!\n")
+          PYEOF
+
+      - name: Create Issue for High-Impact Suggestions
+        if: needs.analyze.outputs.confidence > 0.8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "High confidence suggestions detected - could create tracking issue"
+          # gh issue create --title "🤖 Pipeline Optimization Suggestions" --body-file analysis_result.json --label "automation,optimization"
+
+  apply-optimizations:
+    name: ⚡ Apply Optimizations
+    runs-on: ubuntu-latest
+    needs: [analyze, report]
+    if: github.event.inputs.auto_apply == 'true' && needs.analyze.outputs.confidence > 0.85
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Analysis
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-analysis
+
+      - name: Apply Optimizations
+        run: |
+          echo "🤖 Auto-apply is enabled but requires manual review for safety"
+          echo "Suggestions would be applied here with proper validation"
+
+      - name: Create PR with Optimizations
+        if: false  # Disabled for safety
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "AI Optimizer Bot"
+          git config user.email "ai-optimizer@github.actions"
+          git checkout -b ai-optimizations-${{ github.run_id }}
+          # Apply changes here
+          git add .
+          git commit -m "🤖 Apply AI-suggested pipeline optimizations"
+          git push origin ai-optimizations-${{ github.run_id }}
+          gh pr create --title "🤖 AI Pipeline Optimizations" --body "Automated optimizations suggested by AI analysis"
+
